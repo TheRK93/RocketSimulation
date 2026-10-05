@@ -47,6 +47,12 @@
         <button id="viewDataBtn" class="bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-lg text-white text-sm font-bold shadow transition-colors border border-slate-600">Telemetry</button>
     </div>
 
+    <!-- Supersonic Alert -->
+    <div id="supersonicAlert" class="absolute top-4 right-4 z-50 bg-yellow-300 text-red-700 font-black px-4 py-2 rounded-lg shadow-[0_0_15px_rgba(253,224,71,0.6)] border-2 border-red-500 hidden animate-pulse flex items-center gap-2 text-sm tracking-wide">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
+        MACH 1 EXCEEDED!
+    </div>
+
     <!-- Telemetry Box (Moved below buttons, scaled down 15%) -->
     <div id="telemetry" class="absolute top-16 left-4 z-10 bg-slate-800/80 p-4 rounded-xl shadow-lg backdrop-blur-sm border border-slate-700 pointer-events-none text-sm space-y-1 transform scale-[0.85] origin-top-left mt-2">
         <h1 class="text-lg font-bold text-sky-400 mb-1 tracking-wide uppercase">Rocket 2D Sim 1.2</h1>
@@ -77,7 +83,10 @@
         </div>
     </div>
 
-    <div class="bg-slate-900 border-t border-slate-700 p-4 pb-8 z-20 flex flex-col gap-4 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.5)]">
+    <!-- Fixed Controls Section Wrap -->
+    <div class="bg-slate-900 border-t border-slate-700 p-4 pb-8 z-20 flex flex-col gap-4 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.5)] flex-grow w-full">
+        <!-- Main Engine Thrust -->
+        <div class="flex flex-col gap-1">
             <div class="flex justify-between">
                 <label for="thrustSlider" class="text-sm font-semibold text-slate-300">Main Engine Thrust</label>
                 <span id="thrustVal" class="text-sm font-mono text-sky-400">0%</span>
@@ -85,6 +94,7 @@
             <input type="range" id="thrustSlider" min="0" max="100" value="0" class="w-full">
         </div>
 
+        <!-- TVC Gimbal Angle -->
         <div class="flex flex-col gap-1">
             <div class="flex justify-between">
                 <label for="gimbalSlider" class="text-sm font-semibold text-slate-300">TVC Gimbal Angle</label>
@@ -93,6 +103,7 @@
             <input type="range" id="gimbalSlider" min="-15" max="15" step="0.1" value="0" class="w-full">
         </div>
 
+        <!-- Buttons -->
         <div class="flex flex-wrap gap-4 mt-2 items-end">
             <div class="flex-1 min-w-[90px]">
                 <label for="initPitch" class="block text-xs font-semibold text-slate-300 mb-1">Init Pitch (°)</label>
@@ -311,8 +322,8 @@
             chartUpdateTimer = 0;
             trail = [];
             
-            // Clear Data
-            dataHistory = { time: [], u: [], w: [], q: [], theta: [], X: [], Z: [], AoA: [], xcp: [] };
+            // Clear Data (Fixed AoA to aoa)
+            dataHistory = { time: [], u: [], w: [], q: [], theta: [], X: [], Z: [], aoa: [], xcp: [] };
             initCharts();
 
             document.getElementById('tel-status').innerText = "Ready";
@@ -608,6 +619,15 @@
             document.getElementById('tel-vel').innerText = state.u.toFixed(1) + ' m/s';
             // Convert pitch to degrees for display
             document.getElementById('tel-pitch').innerText = (state.theta * 180 / Math.PI).toFixed(1) + '°';
+
+            // Supersonic Check (Mach 1 ~ 343 m/s)
+            const V = Math.sqrt(state.u * state.u + state.w * state.w);
+            const alertEl = document.getElementById('supersonicAlert');
+            if (V >= 343) {
+                alertEl.classList.remove('hidden');
+            } else {
+                alertEl.classList.add('hidden');
+            }
         }
 
         // Input Listeners
