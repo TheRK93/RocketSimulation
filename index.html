@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rocket Dynamics Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #0f172a; touch-action: none; }
+        canvas { display: block; }
+        
+        /* Custom range slider styling for a more technical look */
+        input[type=range] {
+            -webkit-appearance: none; /* Hides the slider so that custom slider can be made */
+            width: 100%; /* Specific width is required for Firefox. */
+            background: transparent; /* Otherwise white in Chrome */
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 24px;
+            width: 24px;
+            border-radius: 50%;
+            background: #38bdf8;
+            cursor: pointer;
+            margin-top: -10px; /* You need to specify a margin in Chrome, but in Firefox and IE it is automatic */
+            box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #334155;
+            border-radius: 2px;
+        }
+        input[type=range]:focus {
+            outline: none;
+        }
+    </style>
+</head>
+<body class="text-slate-200 font-sans antialiased flex flex-col h-screen">
+
+    <div id="telemetry" class="absolute top-4 left-4 z-10 bg-slate-800/80 p-4 rounded-xl shadow-lg backdrop-blur-sm border border-slate-700 pointer-events-none text-sm space-y-1">
+        <h1 class="text-lg font-bold text-sky-400 mb-2 tracking-wide uppercase">Flight Data</h1>
+        <div class="flex justify-between w-48"><span class="text-slate-400">Altitude:</span> <span id="tel-alt" class="font-mono text-white">0.0 m</span></div>
+        <div class="flex justify-between w-48"><span class="text-slate-400">Velocity (u):</span> <span id="tel-vel" class="font-mono text-white">0.0 m/s</span></div>
+        <div class="flex justify-between w-48"><span class="text-slate-400">Pitch (θ):</span> <span id="tel-pitch" class="font-mono text-white">90.0°</span></div>
+        <div class="flex justify-between w-48"><span class="text-slate-400">Status:</span> <span id="tel-status" class="font-mono text-emerald-400">Ready</span></div>
+    </div>
+
+    <!-- View Toggle Buttons -->
+    <div class="absolute top-4 right-4 z-20 flex gap-2">
+        <button id="viewLiveBtn" class="bg-sky-600 hover:bg-sky-500 px-4 py-2 rounded-lg text-white text-sm font-bold shadow transition-colors border border-sky-400">Live View</button>
+        <button id="viewDataBtn" class="bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-lg text-white text-sm font-bold shadow transition-colors border border-slate-600">Telemetry</button>
+    </div>
+
+    <div class="flex-grow relative w-full overflow-hidden" id="main-area">
+        <!-- Canvas View -->
+        <div class="w-full h-full absolute inset-0" id="canvas-container">
+            <canvas id="simCanvas"></canvas>
+        </div>
+        
+        <!-- Telemetry Graphs View -->
+        <div class="w-full h-full absolute inset-0 hidden overflow-y-auto p-4 pt-20 bg-slate-900 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 z-10" id="data-container">
+            <div class="bg-slate-800/80 p-2 rounded-xl border border-slate-700 min-h-[250px] flex flex-col"><div class="flex-grow relative"><canvas id="chart-u"></canvas></div></div>
+            <div class="bg-slate-800/80 p-2 rounded-xl border border-slate-700 min-h-[250px] flex flex-col"><div class="flex-grow relative"><canvas id="chart-w"></canvas></div></div>
+            <div class="bg-slate-800/80 p-2 rounded-xl border border-slate-700 min-h-[250px] flex flex-col"><div class="flex-grow relative"><canvas id="chart-q"></canvas></div></div>
+            <div class="bg-slate-800/80 p-2 rounded-xl border border-slate-700 min-h-[250px] flex flex-col"><div class="flex-grow relative"><canvas id="chart-theta"></canvas></div></div>
+            <div class="bg-slate-800/80 p-2 rounded-xl border border-slate-700 min-h-[250px] flex flex-col"><div class="flex-grow relative"><canvas id="chart-x"></canvas></div></div>
+            <div class="bg-slate-800/80 p-2 rounded-xl border border-slate-700 min-h-[250px] flex flex-col"><div class="flex-grow relative"><canvas id="chart-z"></canvas></div></div>
+            <div class="bg-slate-800/80 p-2 rounded-xl border border-slate-700 min-h-[250px] flex flex-col"><div class="flex-grow relative"><canvas id="chart-aoa"></canvas></div></div>
+            <div class="bg-slate-800/80 p-2 rounded-xl border border-slate-700 min-h-[250px] flex flex-col"><div class="flex-grow relative"><canvas id="chart-xcp"></canvas></div></div>
+        </div>
+    </div>
+
+    <div class="bg-slate-900 border-t border-slate-700 p-4 pb-8 z-20 flex flex-col gap-4 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.5)]">
+        
+        <div class="flex flex-col gap-1">
+            <div class="flex justify-between">
+                <label for="thrustSlider" class="text-sm font-semibold text-slate-300">Main Engine Thrust</label>
+                <span id="thrustVal" class="text-sm font-mono text-sky-400">0%</span>
+            </div>
+            <input type="range" id="thrustSlider" min="0" max="100" value="0" class="w-full">
+        </div>
+
+        <div class="flex flex-col gap-1">
+            <div class="flex justify-between">
+                <label for="gimbalSlider" class="text-sm font-semibold text-slate-300">TVC Gimbal Angle</label>
+                <span id="gimbalVal" class="text-sm font-mono text-amber-400">0.0°</span>
+            </div>
+            <input type="range" id="gimbalSlider" min="-15" max="15" step="0.1" value="0" class="w-full">
+        </div>
+
+        <div class="flex flex-wrap gap-4 mt-2 items-end">
+            <div class="flex-1 min-w-[90px]">
+                <label for="initPitch" class="block text-xs font-semibold text-slate-300 mb-1">Init Pitch (°)</label>
+                <input type="number" id="initPitch" value="90" class="w-full bg-slate-800 text-white p-3 rounded-lg border border-slate-600 focus:border-sky-500 focus:outline-none font-mono text-center">
+            </div>
+            <button id="resetBtn" class="flex-[2] bg-slate-700 hover:bg-slate-600 active:bg-slate-800 text-white font-bold py-3 px-4 rounded-lg transition-colors">
+                Reset Sim
+            </button>
+            <button id="launchBtn" class="flex-[2] bg-sky-600 hover:bg-sky-500 active:bg-sky-700 text-white font-bold py-3 px-4 rounded-lg transition-colors shadow-[0_0_15px_rgba(2,132,199,0.5)]">
+                Launch!
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- MATLAB Physics Port ---
+
+        function nose_cylinder_forces(u, w) {
+            const S_ref = 0.018;
+            const Sp_Sref = 15.0;
+            const xcp_n = 0.3;
+            const xcp_cyl = 1.0;
+            const CNa_b = 2.0;
+            const Cdc = 1.2;
+            const eta = 0.6;
+            const CA = 0.4;
+            const rho = 0.8;
+
+            let V = Math.sqrt(u*u + w*w);
+            if (V < 0.01) V = 0.01;
+
+            const q_bar = 0.5 * rho * V * V;
+            const alpha_body = Math.atan2(w, u);
+
+            const FN_linear = q_bar * S_ref * CNa_b * alpha_body;
+            const FN_nonlinear = q_bar * S_ref * eta * Cdc * Sp_Sref * Math.pow(Math.sin(alpha_body), 2) * Math.sign(alpha_body);
+
+            const FN = -(FN_linear + FN_nonlinear);
+            const FA = -(q_bar * S_ref * CA);
+            
+            let xcp;
+            if (FN === 0) {
+                xcp = xcp_n;
+            } else {
+                xcp = ((-FN_linear * xcp_n) + (-FN_nonlinear * xcp_cyl)) / FN;
+            }
+            return { FN, FA, xcp };
+        }
+
+        function fin_forces(u, w, q) {
+            const S_ref = 0.018;
+            const xcg = 1.5;
+            const xcp_f = 2.5;
+            const CNa_f = 5.0;
+            const rho = 0.8;
+
+            let V = Math.sqrt(u*u + w*w);
+            if (V < 0.01) V = 0.01;
+
+            const q_bar = 0.5 * rho * V * V;
+            const dist_fin_cg = xcp_f - xcg;
+            const w_fin = w + (q * dist_fin_cg);
+            const alpha_fins = Math.atan2(w_fin, u);
+
+            const L_fins = (q_bar * S_ref * CNa_f * alpha_fins);
+            const FN = -L_fins;
+            const FA = 0; // Future implementation
+            const xcp = xcp_f;
+
+            return { FN, FA, xcp };
+        }
+
+        function thrust_model(delta_TV, ThPer) {
+            const maxThrust = 2000;
+            const xcp_gim = 2.6;
+            
+            const currentThrust = maxThrust * (ThPer / 100);
+            const Tx = currentThrust * Math.cos(delta_TV);
+            const Tz = currentThrust * Math.sin(delta_TV);
+            const xcp = xcp_gim;
+
+            return { Tx, Tz, xcp };
+        }
+
+        function mixer(FN_body, FN_fin, FA_body, FA_fin, Tz, xcp_body, xcp_fin, xcp_Tz) {
+            const xcg = 1.5;
+            const d_body = xcp_body - xcg;
+            const d_fins = xcp_fin - xcg;
+            const d_Th = xcp_Tz - xcg;
+
+            const FN = FN_body + FN_fin;
+            const FA = FA_body + FA_fin;
+            const M = (FN_body * d_body) + (FN_fin * d_fins) + (Tz * d_Th);
+
+            return { FN, FA, M };
+        }
+
+        function rocket_dynamics(FN, FA, M, Tx, Tz, u, w, q, theta) {
+            const m = 25.0;
+            const Iyy = 15.0;
+            const g = 9.81;
+
+            const Fx = Tx + FA - (m * (g * Math.sin(theta)));
+            const Fz = Tz + FN + (m * (g * Math.cos(theta)));
+
+            const u_dot = (Fx / m) - (q * w);
+            const w_dot = (Fz / m) + (q * u);
+            const q_dot = M / Iyy;
+
+            return { u_dot, w_dot, q_dot };
+        }
+
+        function inertial_vel(u, w, theta) {
+            const X_p = (u * Math.cos(theta)) + (w * Math.sin(theta));
+            const Z_p = -(u * Math.sin(theta)) + (w * Math.cos(theta));
+            return { X_p, Z_p };
+        }
+
+        // --- View Toggles ---
+        const canvasContainer = document.getElementById('canvas-container');
+        const dataContainer = document.getElementById('data-container');
+        const viewLiveBtn = document.getElementById('viewLiveBtn');
+        const viewDataBtn = document.getElementById('viewDataBtn');
+
+        viewLiveBtn.addEventListener('click', () => {
+            canvasContainer.classList.remove('hidden');
+            dataContainer.classList.add('hidden');
+            viewLiveBtn.className = "bg-sky-600 hover:bg-sky-500 px-4 py-2 rounded-lg text-white text-sm font-bold shadow transition-colors border border-sky-400";
+            viewDataBtn.className = "bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-lg text-white text-sm font-bold shadow transition-colors border border-slate-600";
+        });
+
+        viewDataBtn.addEventListener('click', () => {
+            canvasContainer.classList.add('hidden');
+            dataContainer.classList.remove('hidden');
+            viewDataBtn.className = "bg-sky-600 hover:bg-sky-500 px-4 py-2 rounded-lg text-white text-sm font-bold shadow transition-colors border border-sky-400";
+            viewLiveBtn.className = "bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-lg text-white text-sm font-bold shadow transition-colors border border-slate-600";
+        });
+
+        // --- Simulation Engine ---
+
+        // State variables
+        let state = {
+            u: 0.0,
+            w: 0.0,
+            q: 0.0,
+            theta: Math.PI / 2, // 90 degrees, pointing straight up
+            X: 0.0,
+            Z: 0.0,             // Altitude logic: negative Z means higher altitude in standard aerospace, but we'll adapt for visualization
+        };
+
+        // Inputs
+        let inputs = {
+            ThPer: 0,
+            delta_TV: 0 // radians
+        };
+
+        let lastTime = 0;
+        let isLanded = true;
+        let hasLaunched = false;
+        let simTime = 0;
+        let chartUpdateTimer = 0;
+        let trail = [];
+
+        // Data History for Charts
+        let dataHistory = { time: [], u: [], w: [], q: [], theta: [], X: [], Z: [], aoa: [], xcp: [] };
+        let charts = {};
+        
+        function initCharts() {
+            const chartConfig = (label, color) => ({
+                type: 'line',
+                data: { labels: dataHistory.time, datasets: [{ label: label, data: [], borderColor: color, borderWidth: 2, pointRadius: 0, tension: 0.1 }] },
+                options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { display: true, title: {display: true, text: 'Time (s)', color: '#94a3b8'}, ticks: {color: '#64748b'} }, y: { display: true, grid: {color: '#334155'}, ticks: {color: '#94a3b8'} } }, plugins: { legend: { labels: { color: '#f8fafc' } } } }
+            });
+
+            const ctxs = ['u', 'w', 'q', 'theta', 'x', 'z', 'aoa', 'xcp'];
+            const labels = ['Velocity U (m/s)', 'Velocity W (m/s)', 'Pitch Rate Q (rad/s)', 'Pitch Theta (deg)', 'Position X (m)', 'Altitude (m)', 'Angle of Attack (deg)', 'Overall XCP (m)'];
+            const colors = ['#38bdf8', '#a78bfa', '#f472b6', '#fbbf24', '#34d399', '#f87171', '#2dd4bf', '#fb923c'];
+
+            ctxs.forEach((key, index) => {
+                if(charts[key]) charts[key].destroy();
+                charts[key] = new Chart(document.getElementById(`chart-${key}`).getContext('2d'), chartConfig(labels[index], colors[index]));
+            });
+        }
+        
+        function updateCharts() {
+            charts.u.data.datasets[0].data = dataHistory.u;
+            charts.w.data.datasets[0].data = dataHistory.w;
+            charts.q.data.datasets[0].data = dataHistory.q;
+            charts.theta.data.datasets[0].data = dataHistory.theta;
+            charts.x.data.datasets[0].data = dataHistory.X;
+            charts.z.data.datasets[0].data = dataHistory.Z;
+            charts.aoa.data.datasets[0].data = dataHistory.aoa;
+            charts.xcp.data.datasets[0].data = dataHistory.xcp;
+            
+            Object.values(charts).forEach(c => c.update());
+        }
+
+        function resetSim() {
+            let initialPitchDeg = parseFloat(document.getElementById('initPitch').value);
+            if (isNaN(initialPitchDeg)) initialPitchDeg = 90;
+
+            state = { u: 0, w: 0, q: 0, theta: initialPitchDeg * (Math.PI / 180), X: 0, Z: 0 };
+            inputs.ThPer = 0;
+            inputs.delta_TV = 0;
+            document.getElementById('thrustSlider').value = 0;
+            document.getElementById('gimbalSlider').value = 0;
+            updateUI();
+            isLanded = true;
+            hasLaunched = false;
+            simTime = 0;
+            chartUpdateTimer = 0;
+            trail = [];
+            
+            // Clear Data
+            dataHistory = { time: [], u: [], w: [], q: [], theta: [], X: [], Z: [], aoa: [], xcp: [] };
+            initCharts();
+
+            document.getElementById('tel-status').innerText = "Ready";
+            document.getElementById('tel-status').className = "font-mono text-emerald-400";
+        }
+
+        function launch() {
+            if(isLanded) {
+                isLanded = false;
+                hasLaunched = true;
+                inputs.ThPer = 100; // Auto 100% thrust on launch
+                document.getElementById('thrustSlider').value = 100;
+                updateUI();
+                document.getElementById('tel-status').innerText = "In Flight";
+                document.getElementById('tel-status').className = "font-mono text-sky-400";
+            }
+        }
+
+        function stepSimulation(dt) {
+            if (isLanded) return;
+            
+            // Limit dt to avoid instabilities on lag spikes
+            if (dt > 0.05) dt = 0.05; 
+
+            // 1. Calculate Aerodynamics
+            const aero_body = nose_cylinder_forces(state.u, state.w);
+            const aero_fin = fin_forces(state.u, state.w, state.q);
+
+            // 2. Calculate Thrust
+            const thrust = thrust_model(inputs.delta_TV, inputs.ThPer);
+
+            // 3. Mix forces and moments
+            const mixed = mixer(
+                aero_body.FN, aero_fin.FN, 
+                aero_body.FA, aero_fin.FA, 
+                thrust.Tz, 
+                aero_body.xcp, aero_fin.xcp, thrust.xcp
+            );
+
+            // 4. Calculate Dynamics (Accelerations)
+            const dyn = rocket_dynamics(
+                mixed.FN, mixed.FA, mixed.M, 
+                thrust.Tx, thrust.Tz, 
+                state.u, state.w, state.q, state.theta
+            );
+
+            // 5. Integrate State (Euler)
+            state.u += dyn.u_dot * dt;
+            state.w += dyn.w_dot * dt;
+            state.q += dyn.q_dot * dt;
+            state.theta += state.q * dt;
+
+            // 6. Kinematics (Inertial Velocity)
+            const vel = inertial_vel(state.u, state.w, state.theta);
+            
+            // Integrate position
+            state.X += vel.X_p * dt;
+            state.Z += vel.Z_p * dt; 
+            
+            simTime += dt;
+            chartUpdateTimer += dt;
+
+            // Log Telemetry Data (Update charts at a fixed interval e.g. 0.1s to save memory)
+            if (chartUpdateTimer >= 0.1) {
+                chartUpdateTimer = 0;
+                
+                const aoa = Math.atan2(state.w, state.u) * (180/Math.PI);
+                
+                // Calculate overall Center of Pressure
+                const FN_total = aero_body.FN + aero_fin.FN;
+                let xcp_total = aero_body.xcp; // default to nose cp if no normal force
+                if (Math.abs(FN_total) > 0.01) {
+                    xcp_total = ((aero_body.FN * aero_body.xcp) + (aero_fin.FN * aero_fin.xcp)) / FN_total;
+                }
+                
+                dataHistory.time.push(simTime.toFixed(1));
+                dataHistory.u.push(state.u);
+                dataHistory.w.push(state.w);
+                dataHistory.q.push(state.q);
+                dataHistory.theta.push(state.theta * (180/Math.PI));
+                dataHistory.X.push(state.X);
+                dataHistory.Z.push(-state.Z); // Altitude is positive visually
+                dataHistory.aoa.push(aoa);
+                dataHistory.xcp.push(xcp_total);
+                
+                updateCharts();
+            }
+
+            // Ground Collision & Stop Logic
+            const altitude = -state.Z;
+            
+            // If altitude drops below zero AFTER we have launched and moved a little bit in time
+            if (altitude <= 0 && hasLaunched && simTime > 0.1) { 
+                state.Z = 0; // Clamp to ground
+                isLanded = true; // Halts the simulation step
+                inputs.ThPer = 0;
+                document.getElementById('thrustSlider').value = 0;
+                document.getElementById('tel-status').innerText = "Stopped (Impact)";
+                document.getElementById('tel-status').className = "font-mono text-rose-500 font-bold";
+                updateCharts(); // Final update
+            }
+
+            // Record trail
+            if (trail.length === 0 || Math.hypot(trail[trail.length-1].X - state.X, trail[trail.length-1].Z - state.Z) > 1) {
+                trail.push({X: state.X, Z: state.Z});
+                if (trail.length > 200) trail.shift();
+            }
+        }
+
+        // --- Visualizer ---
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('canvas-container');
+
+        function resize() {
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        function drawRocket(ctx) {
+            const rocketLength = 3; // meters for visualization
+            const width = 0.4;
+            
+            ctx.save();
+            
+            // Draw relative to CG at (0,0)
+            // Rocket drawn pointing to +X so that 0 rotation = pointing right.
+            const noseX = 1.5;
+            const baseX = -1.5; 
+            
+            // Body
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillRect(baseX, -width/2, 2.5, width); // Body excluding nosecone
+            
+            // Nosecone
+            ctx.beginPath();
+            ctx.moveTo(noseX, 0);
+            ctx.lineTo(noseX - 0.5, -width/2);
+            ctx.lineTo(noseX - 0.5, width/2);
+            ctx.closePath();
+            ctx.fillStyle = '#ef4444'; // Red nose
+            ctx.fill();
+
+            // Fins (at back)
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath();
+            ctx.moveTo(baseX + 0.5, -width/2);
+            ctx.lineTo(baseX, -width/2 - 0.4);
+            ctx.lineTo(baseX, -width/2);
+            ctx.closePath();
+            ctx.fill();
+            
+            ctx.beginPath();
+            ctx.moveTo(baseX + 0.5, width/2);
+            ctx.lineTo(baseX, width/2 + 0.4);
+            ctx.lineTo(baseX, width/2);
+            ctx.closePath();
+            ctx.fill();
+
+            // Engine Nozzle
+            ctx.fillStyle = '#334155';
+            ctx.fillRect(baseX - 0.2, -0.15, 0.2, 0.3);
+
+            // Thrust Flame
+            if (inputs.ThPer > 0) {
+                ctx.save();
+                ctx.translate(baseX - 0.2, 0);
+                
+                ctx.rotate(inputs.delta_TV); 
+                
+                const flameLength = (inputs.ThPer / 100) * 2;
+                
+                // Outer flame
+                ctx.fillStyle = 'rgba(245, 158, 11, 0.6)'; // Amber
+                ctx.beginPath();
+                ctx.moveTo(0, -0.15);
+                ctx.lineTo(-flameLength, 0);
+                ctx.lineTo(0, 0.15);
+                ctx.fill();
+                
+                // Inner flame
+                ctx.fillStyle = 'rgba(253, 230, 138, 0.9)'; // Yellow
+                ctx.beginPath();
+                ctx.moveTo(0, -0.05);
+                ctx.lineTo(-flameLength * 0.5, 0);
+                ctx.lineTo(0, 0.05);
+                ctx.fill();
+                
+                ctx.restore();
+            }
+
+            ctx.restore();
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Camera mapping
+            // We want to center the rocket.
+            // Altitude is -state.Z
+            const pixelsPerMeter = 15;
+            
+            // To keep ground visible initially, add a vertical offset
+            const cy = canvas.height - 100; 
+            const cx = canvas.width / 2;
+
+            ctx.save();
+            
+            // Translate camera to center on rocket (optional: lerp this for smoothness)
+            ctx.translate(cx, cy);
+            
+            // The mathematical world: X is horizontal, Altitude (-Z) is vertical up.
+            // Canvas world: X is right, Y is down.
+            // So drawX = state.X * scale, drawY = state.Z * scale (since Z negative is UP, and Canvas Y negative is UP).
+            
+            // We'll move the world opposite to the rocket to keep rocket centered
+            ctx.translate(-state.X * pixelsPerMeter, -state.Z * pixelsPerMeter);
+
+            // --- Draw World ---
+            
+            // Ground
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(-10000, 0, 20000, 1000); // Massive ground
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(-10000, 0);
+            ctx.lineTo(10000, 0);
+            ctx.stroke();
+
+            // Grid lines for scale
+            ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+            ctx.lineWidth = 1;
+            for(let i = -1000; i <= 1000; i+=10) {
+                ctx.beginPath();
+                ctx.moveTo(i * pixelsPerMeter, -10000);
+                ctx.lineTo(i * pixelsPerMeter, 0);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(-10000, -i * pixelsPerMeter);
+                ctx.lineTo(10000, -i * pixelsPerMeter);
+                ctx.stroke();
+            }
+
+            // Draw Trail
+            if (trail.length > 1) {
+                ctx.strokeStyle = 'rgba(56, 189, 248, 0.5)'; // Sky blue trail
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                for (let i = 0; i < trail.length; i++) {
+                    const pt = trail[i];
+                    if (i === 0) ctx.moveTo(pt.X * pixelsPerMeter, pt.Z * pixelsPerMeter);
+                    else ctx.lineTo(pt.X * pixelsPerMeter, pt.Z * pixelsPerMeter);
+                }
+                ctx.lineTo(state.X * pixelsPerMeter, state.Z * pixelsPerMeter); // Line to current pos
+                ctx.stroke();
+            }
+
+            // Draw Rocket
+            ctx.save();
+            ctx.translate(state.X * pixelsPerMeter, state.Z * pixelsPerMeter);
+            
+            // Rotation: Mathematics `theta` measures from positive X axis towards positive Z axis?
+            // Let's re-verify `inertial_vel`: 
+            // X_p = u*cos(th) + w*sin(th)
+            // Z_p = -u*sin(th) + w*cos(th)
+            // When th = 90 deg (PI/2), X_p = w, Z_p = -u. (Rocket pointing straight UP).
+            // In canvas, 0 rotation means pointing RIGHT.
+            // If we rotate by -theta, then th=90 means rotate -90 (pointing UP).
+            ctx.rotate(-state.theta);
+            
+            // Scale rocket size up slightly for visibility
+            const visualScale = pixelsPerMeter;
+            ctx.scale(visualScale, visualScale);
+            
+            drawRocket(ctx);
+            ctx.restore();
+
+            ctx.restore();
+        }
+
+        
+        function updateUI() {
+            document.getElementById('thrustVal').innerText = inputs.ThPer + '%';
+            document.getElementById('gimbalVal').innerText = (inputs.delta_TV * (180/Math.PI)).toFixed(1) + '°';
+            
+            document.getElementById('tel-alt').innerText = Math.max(0, -state.Z).toFixed(1) + ' m';
+            document.getElementById('tel-vel').innerText = state.u.toFixed(1) + ' m/s';
+            // Convert pitch to degrees for display
+            document.getElementById('tel-pitch').innerText = (state.theta * 180 / Math.PI).toFixed(1) + '°';
+        }
+
+        // Input Listeners
+        document.getElementById('thrustSlider').addEventListener('input', (e) => {
+            inputs.ThPer = parseFloat(e.target.value);
+            updateUI();
+        });
+
+        document.getElementById('gimbalSlider').addEventListener('input', (e) => {
+            // Slider is in degrees, store in radians
+            const deg = parseFloat(e.target.value);
+            inputs.delta_TV = deg * (Math.PI / 180);
+            updateUI();
+        });
+
+        document.getElementById('initPitch').addEventListener('input', (e) => {
+            if (isLanded) {
+                let deg = parseFloat(e.target.value);
+                if (!isNaN(deg)) {
+                    state.theta = deg * (Math.PI / 180);
+                    updateUI();
+                }
+            }
+        });
+
+        document.getElementById('resetBtn').addEventListener('click', resetSim);
+        document.getElementById('launchBtn').addEventListener('click', launch);
+
+
+        function gameLoop(time) {
+            if (!lastTime) lastTime = time;
+            const dt = (time - lastTime) / 1000; // seconds
+            lastTime = time;
+
+            stepSimulation(dt);
+            render();
+            updateUI();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Start
+        resetSim();
+        requestAnimationFrame(gameLoop);
+
+    </script>
+</body>
+</html>
