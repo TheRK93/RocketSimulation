@@ -280,7 +280,34 @@
             const chartConfig = (label, color) => ({
                 type: 'line',
                 data: { labels: dataHistory.time, datasets: [{ label: label, data: [], borderColor: color, borderWidth: 2, pointRadius: 0, tension: 0.1 }] },
-                options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { display: true, title: {display: true, text: 'Time (s)', color: '#94a3b8'}, ticks: {color: '#64748b'} }, y: { display: true, grid: {color: '#334155'}, ticks: {color: '#94a3b8'} } }, plugins: { legend: { labels: { color: '#f8fafc' } } } }
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    animation: false, 
+                    scales: { 
+                        x: { 
+                            display: true, 
+                            title: {display: true, text: 'Time (s)', color: '#94a3b8'}, 
+                            ticks: {color: '#64748b'} 
+                        }, 
+                        y: { 
+                            display: true, 
+                            grid: {color: '#334155'}, 
+                            suggestedMin: -0.1,
+                            suggestedMax: 0.1,
+                            ticks: {
+                                color: '#94a3b8',
+                                callback: function(value) {
+                                    // Force numbers very close to 0 to display cleanly as '0'
+                                    if (Math.abs(value) < 0.0001) return '0';
+                                    // Round other numbers to 3 decimal places to avoid long float strings
+                                    return Math.round(value * 1000) / 1000;
+                                }
+                            } 
+                        } 
+                    }, 
+                    plugins: { legend: { labels: { color: '#f8fafc' } } } 
+                }
             });
 
             const ctxs = ['u', 'w', 'q', 'theta', 'x', 'z', 'aoa', 'xcp'];
