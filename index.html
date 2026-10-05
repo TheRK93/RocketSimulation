@@ -7,8 +7,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #0f172a; touch-action: none; }
-        canvas { display: block; }
+        body { margin: 0; background-color: #0f172a; }
+        canvas { display: block; touch-action: none; }
         
         /* Custom range slider styling for a more technical look */
         input[type=range] {
@@ -38,7 +38,7 @@
         }
     </style>
 </head>
-<body class="text-slate-200 font-sans antialiased flex flex-col h-screen">
+<body class="text-slate-200 font-sans antialiased flex flex-col min-h-[100dvh]">
 
     <div id="telemetry" class="absolute top-4 left-4 z-10 bg-slate-800/80 p-4 rounded-xl shadow-lg backdrop-blur-sm border border-slate-700 pointer-events-none text-sm space-y-1">
         <h1 class="text-lg font-bold text-sky-400 mb-2 tracking-wide uppercase">Flight Data</h1>
@@ -54,7 +54,7 @@
         <button id="viewDataBtn" class="bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-lg text-white text-sm font-bold shadow transition-colors border border-slate-600">Telemetry</button>
     </div>
 
-    <div class="flex-grow relative w-full overflow-hidden" id="main-area">
+    <div class="flex-grow relative w-full min-h-[50vh] overflow-hidden" id="main-area">
         <!-- Canvas View -->
         <div class="w-full h-full absolute inset-0" id="canvas-container">
             <canvas id="simCanvas"></canvas>
@@ -73,7 +73,7 @@
         </div>
     </div>
 
-    <div class="bg-slate-900 border-t border-slate-700 p-4 pb-8 z-20 flex flex-col gap-4 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.5)]">
+    <div class="bg-slate-900 border-t border-slate-700 p-4 pb-10 z-20 flex flex-col gap-4 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.5)]">
         
         <div class="flex flex-col gap-1">
             <div class="flex justify-between">
